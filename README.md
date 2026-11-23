@@ -823,8 +823,9 @@ editor this way.
 **The web page.** `pai ui` prints a link to a page the daemon serves:
 your inbox in every group (answer questions, take, finish or give back
 jobs, approve proposals), and, for the group picked at the top, the board
-(post jobs, see each one's question and result, cancel), workflows (each
-step's state and result, start or cancel one) and the group (members,
+(post jobs, see each one's question and result, cancel), workflows (a
+graph of the steps, colored by state, with branches, loops and fan-out;
+pick a step for its job, result and text; start or cancel one) and the group (members,
 roles, policy). It refreshes every few seconds.
 
 ```sh

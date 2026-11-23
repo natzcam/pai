@@ -83,9 +83,46 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
 .empty { color: var(--muted); padding: 14px; text-align: center; background: var(--panel); border: 1px dashed var(--line); border-radius: 8px; }
-.steps { display: grid; gap: 6px; }
-.step { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; align-items: start; padding: 8px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
-.step .meta { font-size: 12.5px; color: var(--muted); }
+/* A workflow: its steps as a graph (left) and the step picked (right), stacked on narrow screens. */
+.split { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
+.split > .pane { flex: 1 1 300px; }
+.graphbox { flex: 1 1 0; max-width: 100%; overflow-x: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; display: grid; gap: 6px; min-width: 0; }
+.graphbox svg { display: block; margin: 0 auto; overflow: visible; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; border: 1.5px solid; margin-right: 5px; vertical-align: -1px; }
+.pane { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; display: grid; gap: 8px; min-width: 0; }
+.pane pre { background: var(--panel); }
+dl { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; font-size: 13px; }
+dt { color: var(--muted); }
+dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.edge { fill: none; stroke: var(--line); stroke-width: 1.6; stroke-linejoin: round; }
+.edge.on { stroke: var(--muted); }
+.edge.loop { stroke: var(--claimed); stroke-dasharray: 5 4; }
+.arrow { fill: var(--muted); }
+.arrow.loop { fill: var(--claimed); }
+.elabel { font: 600 11px var(--body); fill: var(--muted); paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+.elabel.loop { fill: var(--claimed); }
+.node { cursor: pointer; outline: none; }
+.node .box { stroke-width: 1.6; }
+.node.sel .box { stroke-width: 3; }
+.node:focus-visible .box { stroke: var(--accent); stroke-width: 3; }
+.node .name { font: 600 13.5px var(--body); fill: var(--fg); }
+.node .meta { font: 11.5px var(--body); fill: var(--muted); }
+.node .st { font: 600 10.5px var(--body); letter-spacing: 0.05em; text-transform: uppercase; }
+.k-done .box, i.k-done { fill: var(--done-soft); background: var(--done-soft); stroke: var(--done); border-color: var(--done); }
+.k-running .box, i.k-running { fill: var(--claimed-soft); background: var(--claimed-soft); stroke: var(--claimed); border-color: var(--claimed); }
+.k-failed .box, i.k-failed { fill: var(--bad-soft); background: var(--bad-soft); stroke: var(--bad); border-color: var(--bad); }
+.k-canceled .box, i.k-canceled { fill: var(--bad-soft); background: var(--bad-soft); stroke: var(--bad); border-color: var(--bad); stroke-dasharray: 4 3; border-style: dashed; }
+.k-skipped .box, i.k-skipped { fill: var(--skip-soft); background: var(--skip-soft); stroke: var(--skip); border-color: var(--skip); stroke-dasharray: 4 3; border-style: dashed; }
+.k-pending .box, i.k-pending { fill: var(--panel); background: var(--panel); stroke: var(--skip); border-color: var(--skip); stroke-dasharray: 4 3; border-style: dashed; }
+.k-done .st { fill: var(--done); }
+.k-running .st { fill: var(--claimed); }
+.k-failed .st, .k-canceled .st { fill: var(--bad); }
+.k-skipped .st, .k-pending .st { fill: var(--skip); }
+.dot { fill: var(--panel); stroke: var(--skip); stroke-width: 1.2; }
+.dot.d-done { fill: var(--done); stroke: var(--done); }
+.dot.d-failed { fill: var(--bad); stroke: var(--bad); }
+.dot.d-running { fill: var(--claimed-soft); stroke: var(--claimed); }
 .err { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); background: var(--bad); color: #fff; padding: 8px 14px; border-radius: 8px; max-width: calc(100% - 32px); z-index: 5; }
 .ok { background: var(--done); }
 table { width: 100%; border-collapse: collapse; }
@@ -434,7 +471,7 @@ function boardView () {
       !jobs ? h('div', { class: 'empty' }, 'Loading…')
         : shown.length === 0 ? h('div', { class: 'empty' }, S.filter === 'all' ? 'No jobs yet. Post one above, or start a workflow.' : 'No ' + S.filter + ' jobs.')
           : h('div', { class: 'rows' }, shown.map((j) => [
-            h('div', { class: 'row', onclick: () => { S.open[j.id] = !S.open[j.id]; render() }, 'aria-expanded': String(!!S.open[j.id]) },
+            h('div', { id: 'job-' + j.id, class: 'row', onclick: () => { S.open[j.id] = !S.open[j.id]; render() }, 'aria-expanded': String(!!S.open[j.id]) },
               h('span', { class: 'pill s-' + stateOf(j) }, stateOf(j)),
               h('span', { class: 'mono hide-sm' }, short(j.id)),
               h('span', { class: 'text', title: j.spec.text }, j.spec.text),
@@ -448,30 +485,233 @@ function boardView () {
 
 const STEP_STATES = (f, s) => f.done.includes(s.name) ? 'done' : f.skipped.includes(s.name) ? 'skipped' : f.failed.includes(s.name) ? 'failed' : Object.prototype.hasOwnProperty.call(f.jobs, s.name) ? (f.state === 'running' ? 'running' : 'canceled') : 'pending'
 
-function cond (c) {
-  if (!c) return null
-  const test = c.failed ? 'failed' : c.equals !== undefined ? '= "' + c.equals + '"' : 'contains "' + c.contains + '"'
-  return 'if ' + c.step + (c.not ? ' not ' : ' ') + test
+// A condition's test, and the whole condition.
+const test = (c) => (c.not ? 'not ' : '') + (c.failed ? 'failed' : c.equals !== undefined ? '= "' + c.equals + '"' : 'contains "' + c.contains + '"')
+const cond = (c) => c ? 'if ' + c.step + ' ' + test(c) : null
+const has = (o, k) => !!o && Object.prototype.hasOwnProperty.call(o, k)
+const clip = (t, n) => t.length > n ? t.slice(0, n - 1) + '…' : t
+
+// Text cut to fit px wide in a font, measured on a canvas.
+let pen = null
+function fit (text, font, px) {
+  if (!pen) pen = document.createElement('canvas').getContext('2d')
+  pen.font = font
+  if (pen.measureText(text).width <= px) return text
+  let n = text.length
+  while (n > 1 && pen.measureText(text.slice(0, n - 1) + '…').width > px) n--
+  return text.slice(0, n - 1) + '…'
+}
+const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
+
+// SVG elements, built like h's.
+function svg (tag, attrs, ...kids) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag)
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === undefined || v === null || v === false) continue
+    if (k.startsWith('on')) el.addEventListener(k.slice(2), v)
+    else el.setAttribute(k, String(v))
+  }
+  for (const kid of kids.flat(Infinity)) {
+    if (kid === null || kid === undefined || kid === false) continue
+    el.append(kid instanceof Node ? kid : document.createTextNode(String(kid)))
+  }
+  return el
+}
+
+// The graph's rows: a step goes one below the deepest step it waits for
+// (after names only earlier steps, so there are no cycles); a row keeps
+// the workflow's order.
+function flowRows (steps) {
+  const row = {}
+  const rows = []
+  for (const s of steps) {
+    const r = (s.after || []).reduce((m, a) => Math.max(m, row[a] + 1), 0)
+    row[s.name] = r
+    if (!rows[r]) rows[r] = []
+    rows[r].push(s)
+  }
+  return rows
+}
+
+// Node size, gaps between nodes, padding, and the spacing of the lanes
+// that long edges (left) and repeats (right) run in.
+const GW = 210, GH = 60, GX = 24, GY = 56, GPAD = 12, GLANE = 14
+
+// Who a step is for, and how it fans out, in a line.
+function stepMeta (f, s) {
+  const it = f.items && f.items[s.name]
+  const bits = [s.flow ? 'a workflow' : nameOf(s.to)]
+  if (s.map) bits.push('each item' + (it ? ' ' + it.done + '/' + it.n : ''))
+  if (s.copies) bits.push('×' + s.copies)
+  if ((s.map || s.copies) && s.settle && s.settle !== 'all') bits.push(s.settle === 'first' ? 'first' : s.settle.agree + ' agree')
+  return bits.join(' · ')
+}
+
+// The steps as boxes colored by state, in rows by how deep each waits; an
+// edge from each step it waits for (any one done starts it, so all are
+// drawn), labeled with its condition; each repeat a dashed edge back.
+// Edges never cross a box: one to the next row is a curve through the gap
+// between them, a longer one runs in its own lane down the left, and a
+// repeat leaves and enters through the gaps between rows, in its own lane
+// on the right.
+function flowGraph (f, picked, pick) {
+  const rows = flowRows(f.steps)
+  const rowOf = {}
+  rows.forEach((r, i) => r.forEach((s) => { rowOf[s.name] = i }))
+  const long = []
+  for (const s of f.steps) for (const a of s.after || []) if (rowOf[s.name] - rowOf[a] > 1) long.push(s.name + '<' + a)
+  const loops = f.steps.filter((s) => s.repeat)
+  const left = long.length ? 8 + long.length * GLANE : 0
+  const right = loops.length ? 12 + loops.length * (GLANE + 4) : 0
+  const pad = loops.length ? GY / 2 : GPAD
+  const widest = Math.max(...rows.map((r) => r.length))
+  const inner = widest * GW + (widest - 1) * GX
+  const ox = GPAD + left
+  const width = ox + inner + right + GPAD
+  const height = pad * 2 + rows.length * GH + (rows.length - 1) * GY
+  const rowY = (i) => pad + i * (GH + GY)
+  const pos = {}
+  rows.forEach((r, i) => {
+    const x0 = ox + (inner - (r.length * GW + (r.length - 1) * GX)) / 2
+    r.forEach((s, j) => { pos[s.name] = { x: x0 + j * (GW + GX), y: rowY(i) } })
+  })
+  const byName = {}
+  for (const s of f.steps) byName[s.name] = s
+  const marker = (id, cls) => svg('marker', { id, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, svg('path', { class: cls, d: 'M0,0 L10,5 L0,10 z' }))
+  const edges = []
+  const labels = []
+  for (const s of f.steps) {
+    const q = pos[s.name]
+    for (const a of s.after || []) {
+      const p = pos[a]
+      const x1 = p.x + GW / 2, y1 = p.y + GH, x2 = q.x + GW / 2, y2 = q.y
+      const cls = 'edge' + (STEP_STATES(f, byName[a]) === 'done' ? ' on' : '')
+      const j = long.indexOf(s.name + '<' + a)
+      let lx, ly
+      if (j < 0) {
+        const my = (y1 + y2) / 2
+        edges.push(svg('path', { class: cls, d: 'M' + x1 + ',' + y1 + ' C' + x1 + ',' + my + ' ' + x2 + ',' + my + ' ' + x2 + ',' + (y2 - 2), 'marker-end': 'url(#g-arrow)' }))
+        lx = (x1 + x2) / 2; ly = my + 4
+      } else {
+        const lane = GPAD + 4 + j * GLANE, dy = 6 + j * 4
+        const g1 = y1 + GY / 2 - dy, g2 = y2 - GY / 2 - dy
+        edges.push(svg('path', { class: cls, d: 'M' + x1 + ',' + y1 + ' V' + g1 + ' H' + lane + ' V' + g2 + ' H' + x2 + ' V' + (y2 - 2), 'marker-end': 'url(#g-arrow)' }))
+        lx = x2; ly = (g2 + y2) / 2 + 4
+      }
+      if (s.if && s.if.step === a) labels.push(svg('text', { class: 'elabel', x: lx, y: ly, 'text-anchor': 'middle' }, clip('if ' + test(s.if), 30)))
+    }
+  }
+  loops.forEach((s, k) => {
+    const p = pos[s.name], r = pos[s.repeat.from]
+    const lane = ox + inner + 12 + k * (GLANE + 4), dy = 6 + k * 4
+    const out = p.x + GW - 24, back = r.x + GW - 24
+    const g1 = p.y + GH + GY / 2 + dy, g2 = r.y - GY / 2 + dy
+    edges.push(svg('path', { class: 'edge loop', d: 'M' + out + ',' + (p.y + GH) + ' V' + g1 + ' H' + lane + ' V' + g2 + ' H' + back + ' V' + (r.y - 2), 'marker-end': 'url(#g-loop)' }))
+    const loop = f.loops && f.loops[s.name]
+    const ly = (g1 + g2) / 2
+    labels.push(svg('text', { class: 'elabel loop', x: lane + 8, y: ly, 'text-anchor': 'middle', transform: 'rotate(90 ' + (lane + 8) + ' ' + ly + ')' },
+      loop ? (loop.over ? (loop.round + 1) + ' rounds' : 'round ' + (loop.round + 1) + '/' + s.repeat.max) : 'up to ' + s.repeat.max))
+  })
+  const nodes = f.steps.map((s) => {
+    const st = STEP_STATES(f, s)
+    const { x, y } = pos[s.name]
+    const it = f.items && f.items[s.name]
+    const dots = s.copies && it
+      ? Array.from({ length: it.n }, (_, i) => svg('circle', { class: 'dot' + (i < it.done ? ' d-done' : i < it.done + (it.failed || 0) ? ' d-failed' : st === 'running' ? ' d-running' : ''), cx: x + GW - 14 - (it.n - 1 - i) * 11, cy: y + 41, r: 3.5 }))
+      : []
+    const go = () => pick(s.name)
+    // Texts cut to fit, so the name doesn't run into the state.
+    const room = GW - 24
+    if (!pen) pen = document.createElement('canvas').getContext('2d')
+    pen.font = '600 10.5px ' + FONT
+    const stw = pen.measureText(st.toUpperCase()).width + st.length * 0.525
+    return svg('g', { id: 'fstep-' + s.name, class: 'node k-' + st + (s.name === picked ? ' sel' : ''), tabindex: 0, role: 'button', 'aria-pressed': String(s.name === picked), 'aria-label': s.name + ', ' + st, onclick: go, onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go() } } },
+      svg('title', {}, s.name + ' (' + st + ')'),
+      svg('rect', { class: 'box', x, y, width: GW, height: GH, rx: 8 }),
+      svg('text', { class: 'name', x: x + 12, y: y + 24 }, fit(s.name, '600 13.5px ' + FONT, room - stw - 10)),
+      svg('text', { class: 'st', x: x + GW - 12, y: y + 23, 'text-anchor': 'end' }, st),
+      svg('text', { class: 'meta', x: x + 12, y: y + 45 }, fit(stepMeta(f, s), '11.5px ' + FONT, room - (dots.length ? dots.length * 11 + 6 : 0))),
+      dots)
+  })
+  return svg('svg', { width, height, viewBox: '0 0 ' + width + ' ' + height, role: 'group', 'aria-label': 'The workflow’s steps' },
+    svg('defs', {}, marker('g-arrow', 'arrow'), marker('g-loop', 'arrow loop')), edges, labels, nodes)
+}
+
+// Shows a job on the board, opened, and scrolls to it once it's drawn.
+function showJob (id) {
+  S.tab = 'board'
+  S.filter = 'all'
+  S.open[id] = true
+  S.scrollTo = id
+  try { localStorage.setItem('pai-tab', 'board') } catch (e) {}
+  render()
+  refresh()
+}
+
+function openFlow (id) {
+  S.flow = id
+  S.data.flow = null
+  refresh()
+}
+
+// The step picked in the graph: what it is, its job (or items, or
+// sub-workflow), its result and its text.
+function stepPane (f, s) {
+  const st = STEP_STATES(f, s)
+  const it = f.items && f.items[s.name]
+  const loop = f.loops && f.loops[s.name]
+  const counted = it ? ' (' + it.done + ' of ' + it.n + ' done' + (it.failed ? ', ' + it.failed + ' failed' : '') + ')' : ''
+  const rows = [
+    ['For', s.flow ? (typeof s.flow === 'string' ? 'the workflow in ' + s.flow : 'a workflow' + (s.flow.name ? ', ' + s.flow.name : '') + ', of ' + s.flow.steps.length + ' steps') : nameOf(s.to)],
+    ['After', s.after && s.after.length ? s.after.join(', ') : 'starts at once']
+  ]
+  if (s.if) rows.push(['Runs', cond(s.if)])
+  if (s.map) rows.push(['For each', 'item of ' + s.map + counted])
+  if (s.copies) rows.push(['Copies', s.copies + counted])
+  if (s.map || s.copies) rows.push(['Ends', !s.settle || s.settle === 'all' ? 'once all are done' : s.settle === 'first' ? 'once one is done' : 'once ' + s.settle.agree + ' agree'])
+  if (s.repeat) rows.push(['Repeats', 'from ' + s.repeat.from + ' until ' + s.repeat.until.step + ' ' + test(s.repeat.until) + ', up to ' + s.repeat.max + ' rounds' + (loop ? ' (round ' + (loop.round + 1) + (loop.over ? ', over' : '') + ')' : '')])
+  const job = !s.flow && !s.map && !s.copies && has(f.jobs, s.name) ? f.jobs[s.name] : null
+  const sub = s.flow && has(f.jobs, s.name) ? f.jobs[s.name] : null
+  const items = Object.keys(f.jobs).filter((k) => k.startsWith(s.name + '#')).sort((a, b) => Number(a.split('#')[1]) - Number(b.split('#')[1]))
+  return h('div', { class: 'pane', 'aria-live': 'polite' },
+    h('div', { class: 'actions' }, h('b', {}, s.name), h('span', { class: 'pill s-' + st }, st)),
+    h('dl', {}, rows.map(([k, v]) => [h('dt', {}, k), h('dd', {}, v)])),
+    job ? h('div', { class: 'actions' }, h('span', { class: 'mono muted' }, 'job ' + short(job)), h('button', { class: 'b', onclick: () => showJob(job) }, 'Show on the board')) : null,
+    sub ? h('div', { class: 'actions' }, h('span', { class: 'mono muted' }, 'workflow ' + short(sub)), h('button', { class: 'b', onclick: () => openFlow(sub) }, 'Open it')) : null,
+    items.length ? more('fitems-' + f.id + '-' + s.name, (s.copies ? 'Copies' : 'Items') + ' (' + items.length + ')', h('div', { class: 'actions' }, items.map((k) => h('button', { class: 'b', title: 'Show job ' + f.jobs[k] + ' on the board', onclick: () => showJob(f.jobs[k]) },
+      '#' + (Number(k.split('#')[1]) + 1), ' ', h('span', { class: 'mono muted' }, short(f.jobs[k]))
+    )))) : null,
+    has(f.results, s.name) ? h('div', {}, h('div', { class: 'muted' }, st === 'failed' ? 'Why it failed' : 'Result'), h('pre', {}, f.results[s.name])) : null,
+    h('div', {}, h('div', { class: 'muted' }, s.flow ? 'Its input' : 'Job text', f.cut.includes(s.name) ? ' (cut to fit when posted)' : ''), h('pre', {}, s.text))
+  )
+}
+
+// The graph's box takes the graph's width (set through the DOM: the
+// page's CSP allows no style attributes), so a wide graph puts the step
+// pane below it instead of being cut off beside it.
+function sized (box) {
+  const g = box.querySelector('svg')
+  box.style.flexBasis = (Number(g.getAttribute('width')) + 18) + 'px'
+  return box
 }
 
 function flowDetail (f) {
   const can = S.me && (f.by === S.me.id || isAdmin())
+  // The step shown: the one picked, else the first running, failed or there.
+  const key = 'fstep:' + f.id
+  const picked = f.steps.find((s) => s.name === S.open[key]) || f.steps.find((s) => STEP_STATES(f, s) === 'running') || f.steps.find((s) => STEP_STATES(f, s) === 'failed') || f.steps[0]
+  const n = (list) => list.length ? ', ' + list.length : ''
   return h('div', { class: 'card' },
     h('div', { class: 'actions' }, h('b', {}, f.name || 'Workflow'), h('span', { class: 'pill s-' + f.state }, f.state), h('span', { class: 'muted' }, 'started by ', nameOf(f.by), ' ', ago(f.at)),
-      can && f.state === 'running' ? btn('Cancel workflow', 'fc-' + f.id, () => act('fc-' + f.id, () => api(inGroup('/pai/flows'), { action: 'cancel', id: f.id }), 'Canceled'), 'danger') : null),
+      can && f.state === 'running' ? btn('Cancel workflow', 'fc-' + f.id, () => act('fc-' + f.id, () => api(inGroup('/pai/flows'), { action: 'cancel', id: f.id }), 'Canceled'), 'danger') : null,
+      f.parent ? h('button', { class: 'b', onclick: () => openFlow(f.parent.id) }, 'Open the workflow it runs for') : null),
+    h('div', { class: 'muted' }, f.done.length + ' of ' + f.steps.length + ' steps done', n(f.skipped) && n(f.skipped) + ' skipped', n(f.failed) && n(f.failed) + ' failed on a branch'),
     more('fin-' + f.id, 'Input', h('pre', {}, f.input || '(none)')),
-    h('div', { class: 'steps' }, f.steps.map((s) => {
-      const st = STEP_STATES(f, s)
-      const result = Object.prototype.hasOwnProperty.call(f.results, s.name) ? f.results[s.name] : null
-      return h('div', { class: 'step' },
-        h('span', { class: 'pill s-' + st }, st),
-        h('div', {},
-          h('div', {}, h('b', {}, s.name), h('span', { class: 'muted' }, ' · ', s.flow ? 'a workflow' + (Object.prototype.hasOwnProperty.call(f.jobs, s.name) ? ' (' + short(f.jobs[s.name]) + ')' : '') : s.to || 'anyone')),
-          h('div', { class: 'meta' }, s.after && s.after.length ? 'after ' + s.after.join(', ') : 'at once', s.if ? ' · ' + cond(s.if) : '', s.map ? ' · for each item of ' + s.map : '', s.copies ? ' · ' + s.copies + ' copies' : '', s.settle && s.settle !== 'all' ? ' · ' + (s.settle === 'first' ? 'first done wins' : s.settle.agree + ' must agree') : '', f.items && f.items[s.name] ? ' (' + f.items[s.name].done + ' of ' + f.items[s.name].n + ' done)' : '', s.repeat ? ' · repeats from ' + s.repeat.from + ' ' + (cond(s.repeat.until) || '').replace(/^if/, 'until') + ' (round ' + (((f.loops && f.loops[s.name]) ? f.loops[s.name].round : 0) + 1) + ' of up to ' + s.repeat.max + ')' : '', f.cut.includes(s.name) ? ' · text cut to fit' : ''),
-          result !== null ? more('fres-' + f.id + '-' + s.name, 'Result', h('pre', {}, result)) : null
-        )
-      )
-    })),
+    h('div', { class: 'split' },
+      sized(h('div', { class: 'graphbox' },
+        h('div', { class: 'legend', 'aria-hidden': 'true' }, ['done', 'running', 'pending', 'skipped', 'failed', 'canceled'].map((k) => h('span', {}, h('i', { class: 'k-' + k }), k))),
+        flowGraph(f, picked.name, (name) => { S.open[key] = name; render() }))),
+      stepPane(f, picked)),
     f.output !== null ? h('div', {}, h('div', { class: 'muted' }, f.state === 'done' ? 'Output' : 'Why it stopped'), h('pre', {}, f.output)) : null
   )
 }
@@ -576,6 +816,8 @@ function render (force) {
   let view
   try { view = page() } catch (e) { view = h('main', {}, h('div', { class: 'empty' }, 'This view failed to draw: ' + e.message)) }
   app.replaceChildren(...[].concat(view))
+  const shown = S.scrollTo && document.getElementById('job-' + S.scrollTo)
+  if (shown) { shown.scrollIntoView({ block: 'center' }); S.scrollTo = null }
   if (focus) {
     const el = document.getElementById(focus)
     if (el) { el.focus(); try { if (sel !== null && sel !== undefined) el.setSelectionRange(sel, sel) } catch (e) {} }
