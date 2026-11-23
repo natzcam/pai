@@ -159,10 +159,12 @@ default group or --group <name>
                               members and roles the policy lets you post for
   flow show <file.json>       its layout: when each step can start, who it's
                               for, its branches, loops and sub-workflows
-  flow start <file.json> [input] [--wait] [--json]
+  flow start <file.json> [input] [--key <k>] [--wait] [--json]
                               start the workflow in the file with input (text,
                               or stdin); prints its id, or with --wait the
-                              result of its final steps. See examples/model-team
+                              result of its final steps. With --key, starting
+                              again with the same key gives the run it started,
+                              not a second one. See examples/model-team
   flow list [--json]
   flow get <id> [--wait] [--json]
                               where each step is, or the output
@@ -285,6 +287,8 @@ const OPTIONS = {
   wait: { type: 'boolean' },
   lease: { type: 'string' },
   'max-time': { type: 'string' },
+  // flow start
+  key: { type: 'string' },
   // flow schedule
   every: { type: 'string' },
   start: { type: 'string' },
@@ -1248,7 +1252,7 @@ async function flow (args: string[], flags: Flags, io: CliIo): Promise<number> {
       const spec = await readSpec(need(target, usage), io.cwd)
       const input = args.length > 2 ? args.slice(2).join(' ') : await readStdin(io)
       const c = await client()
-      const started = await c.startFlow(spec, input)
+      const started = await c.startFlow(spec, input, flags.key !== undefined ? { key: flags.key } : {})
       if (!flags.wait) {
         io.stdout.write(flags.json ? `${JSON.stringify(started)}\n` : `${started.id}\n`)
         return 0

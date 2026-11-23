@@ -183,6 +183,11 @@ export class GroupBase extends Replica {
     return await this.#atView(false, async (view) => await readFlow(view, id))
   }
 
+  // Whether a keyed start (keyedFlowId) has used `id`, its run kept or not.
+  async keyUsed (id: string): Promise<boolean> {
+    return await this.#atView(false, async (view) => await view.get(`flow-key/${id}`) !== null)
+  }
+
   // The group's schedules, by name.
   async schedules (): Promise<ScheduleRecord[]> {
     return await this.#atView(false, async (view) => await readSchedules(view))

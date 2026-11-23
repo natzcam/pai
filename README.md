@@ -251,10 +251,12 @@ default group or --group <name>
                               members and roles the policy lets you post for
   flow show <file.json>       its layout: when each step can start, who it's
                               for, its branches, loops and sub-workflows
-  flow start <file.json> [input] [--wait] [--json]
+  flow start <file.json> [input] [--key <k>] [--wait] [--json]
                               start the workflow in the file with input (text,
                               or stdin); prints its id, or with --wait the
-                              result of its final steps. See examples/model-team
+                              result of its final steps. With --key, starting
+                              again with the same key gives the run it started,
+                              not a second one. See examples/model-team
   flow list [--json]
   flow get <id> [--wait] [--json]
                               where each step is, or the output
@@ -888,10 +890,20 @@ online to drive it.
 ```sh
 pai flow start team.json --wait "NAT hole punching"   # the final step's result
 pai flow start team.json "NAT hole punching"          # prints the workflow id
+pai flow start team.json --key nat-1 "NAT hole punching"  # once: a repeat gives the same run
 pai flow list                     # workflows and how far each got
 pai flow get <id> [--wait]        # each step: waiting, its job, or done
 pai flow cancel <id>              # the starter or an admin
 ```
+
+Each start is a new run, unless it has a key: `--key` (or `key` in the
+A2A gateway's start action) makes the workflow's id from the group, you
+and the key, so a retry after a timeout, or a script that fires twice, gets
+the run the key already started. The group's rules check the id, so no
+other member can use your key's id first. A key starts one run, ever:
+once that run has been pruned, starting with the key again is an error. The same key with different steps or input is an
+error. The web page sends a key with each Start, so pressing it again after
+an error doesn't start a second run.
 
 Steps with no `after` start at once, in parallel; `"to": null` lets any
 worker take a step. A step that fails or is canceled stops the workflow

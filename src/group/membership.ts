@@ -8,7 +8,7 @@ import type { AdminOp, GroupAppend, Proposal, QuorumOp, Role, Roster, SharedTask
 import { openSeed, sealSeed, seedCheck } from './seed.js'
 import { MAX_QUESTIONS, RESULT_CUT_NOTE, canClaim, isEnded, jobMessage, leaseFrom, limitsOf, limitsProblem, parseJobOp, questionKey, specProblem, taskResultText } from './jobs.js'
 import type { JobLimits, JobOp, JobRecord, JobSpec } from './jobs.js'
-import { MAX_FLOW_INPUT, flowProblem, flowTargets, scheduleProblem } from './flows.js'
+import { MAX_FLOW_INPUT, MAX_FLOW_KEY, flowProblem, isFlowKey, keyedFlowId, flowTargets, scheduleProblem } from './flows.js'
 import type { FlowSpec, FlowSummary, FlowView, Schedule, ScheduleRecord } from './flows.js'
 import { unknownFields } from './flow-guide.js'
 import type { Message, Part, Task } from '../a2a/types.js'
@@ -772,22 +772,43 @@ export class GroupMembership {
   // ---- workflows (src/group/flows.ts) ----
 
   // Starts a workflow with `input`; the group's rules post its steps as
-  // jobs (as this identity's) as they become ready.
-  async startFlow (spec: FlowSpec, input: string): Promise<FlowView> {
+  // jobs (as this identity's) as they become ready. With `key`, starting
+  // again with the same key returns the run it started instead of a second
+  // one (a retry, or a script that fires twice): the id comes from the
+  // group, this identity and the key (keyedFlowId), and the rules ignore a
+  // start whose id exists.
+  async startFlow (spec: FlowSpec, input: string, opts: { key?: string } = {}): Promise<FlowView> {
     // Fields the rules don't know they'd ignore: most likely a mistake.
     const problem = unknownFields(spec)[0] ?? flowProblem(spec)
     if (problem) throw new Error(problem)
     if (Buffer.byteLength(input) > MAX_FLOW_INPUT) throw new Error(`A workflow's input is at most ${MAX_FLOW_INPUT / 1024} KiB`)
+    const { key } = opts
+    if (key !== undefined && !isFlowKey(key)) throw new Error(`A start key is text, 1 to ${MAX_FLOW_KEY} bytes`)
     if (!this.isMember(this.self)) throw new Error('Not a member of the group')
+    // The same start as `run`: what a key's repeat has to match.
+    const same = (run: FlowView): FlowView => {
+      if (run.input === input && run.name === (spec.name ?? null) && JSON.stringify(run.steps) === JSON.stringify(spec.steps)) return run
+      throw new Error(`The key ${JSON.stringify(key)} already started a different workflow (${run.id})`)
+    }
+    let id: string
+    if (key !== undefined) {
+      id = keyedFlowId(hex(this.base.key), this.self, key)
+      // Its run already: returned even if the policy has changed since.
+      const earlier = await this.base.flow(id)
+      if (earlier) return same(earlier)
+      if (await this.base.keyUsed(id)) throw new Error(`The key ${JSON.stringify(key)} already started a workflow, since pruned (${id}): use another key`)
+    } else {
+      // 00xxxxxx: the rules' ids have the top bit set, keyed ids 01.
+      const raw = randomBytes(16)
+      raw[0]! &= 0x3f
+      id = raw.toString('hex')
+    }
     this.#checkPost(flowTargets(spec))
-    // The top bit clear: ids with it set are the group's rules' own.
-    const raw = randomBytes(16)
-    raw[0]! &= 0x7f
-    const id = raw.toString('hex')
-    await this.base.append({ type: 'flow.start', flow: { id, ...(spec.name !== undefined ? { name: spec.name } : {}), input, steps: spec.steps } })
+    await this.base.append({ type: 'flow.start', flow: { id, ...(key !== undefined ? { key } : {}), ...(spec.name !== undefined ? { name: spec.name } : {}), input, steps: spec.steps } })
     const started = await this.base.flow(id)
     if (!started) throw new Error('The workflow was not recorded')
-    return started
+    // Two starts with one key at once: the rules kept the first.
+    return key !== undefined ? same(started) : started
   }
 
   // Has the group start a workflow every `every` ms (from `start`, a

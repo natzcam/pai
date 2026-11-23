@@ -359,7 +359,7 @@ describe('GroupBase', () => {
     expect(mayPost(a.roster, admin, r)).toBe(false) // r is a reviewer
     expect(mayPost(a.roster, admin, null)).toBe(true)
     expect(mayPost(a.roster, w, w)).toBe(true) // its own devices
-    const jid = (): string => { const b = randomBytes(16); b[0]! &= 0x7f; return b.toString('hex') }
+    const jid = (): string => { const b = randomBytes(16); b[0]! &= 0x3f; return b.toString('hex') }
     const [refused, fine] = [jid(), jid()]
     const post = async (id: string, to: string | null): Promise<void> => {
       await a.base.append({ type: 'job.post', job: { id, spec: { text: 'x' }, to, lease: null }, at: Date.now() })

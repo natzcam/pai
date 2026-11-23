@@ -483,7 +483,9 @@ function boardView () {
   ]
 }
 
-const STEP_STATES = (f, s) => f.done.includes(s.name) ? 'done' : f.skipped.includes(s.name) ? 'skipped' : f.failed.includes(s.name) ? 'failed' : Object.prototype.hasOwnProperty.call(f.jobs, s.name) ? (f.state === 'running' ? 'running' : 'canceled') : 'pending'
+// The step whose failure stopped a failed workflow.
+const stopper = (f) => f.state === 'failed' && f.stopped ? f.stopped : null
+const STEP_STATES = (f, s) => f.done.includes(s.name) ? 'done' : f.skipped.includes(s.name) ? 'skipped' : f.failed.includes(s.name) || stopper(f) === s.name ? 'failed' : Object.prototype.hasOwnProperty.call(f.jobs, s.name) ? (f.state === 'running' ? 'running' : 'canceled') : 'pending'
 
 // A condition's test, and the whole condition.
 const test = (c) => (c.not ? 'not ' : '') + (c.failed ? 'failed' : c.equals !== undefined ? '= "' + c.equals + '"' : 'contains "' + c.contains + '"')
@@ -535,11 +537,14 @@ function flowRows (steps) {
 
 // Node size, gaps between nodes, padding, and the spacing of the lanes
 // that long edges (left) and repeats (right) run in.
+// The offset of the i-th of n lines turning in one half of a row gap
+// (4 to GY/2 - 4 from its middle), spaced as far apart as they fit.
+const spread = (i, n) => 4 + (n > 1 ? i * (GY / 2 - 8) / (n - 1) : 0)
 const GW = 210, GH = 60, GX = 24, GY = 56, GPAD = 12, GLANE = 14
 
 // Who a step is for, and how it fans out, in a line.
 function stepMeta (f, s) {
-  const it = f.items && f.items[s.name]
+  const it = has(f.items, s.name) ? f.items[s.name] : null
   const bits = [s.flow ? 'a workflow' : nameOf(s.to)]
   if (s.map) bits.push('each item' + (it ? ' ' + it.done + '/' + it.n : ''))
   if (s.copies) bits.push('×' + s.copies)
@@ -563,12 +568,13 @@ function flowGraph (f, picked, pick) {
   const loops = f.steps.filter((s) => s.repeat)
   const left = long.length ? 8 + long.length * GLANE : 0
   const right = loops.length ? 12 + loops.length * (GLANE + 4) : 0
-  const pad = loops.length ? GY / 2 : GPAD
+  // Loops turn in the gaps above and below rows, the last row's too.
+  const pad = loops.length ? GY / 2 : GPAD, padEnd = loops.length ? GY : GPAD
   const widest = Math.max(...rows.map((r) => r.length))
   const inner = widest * GW + (widest - 1) * GX
   const ox = GPAD + left
   const width = ox + inner + right + GPAD
-  const height = pad * 2 + rows.length * GH + (rows.length - 1) * GY
+  const height = pad + padEnd + rows.length * GH + (rows.length - 1) * GY
   const rowY = (i) => pad + i * (GH + GY)
   const pos = {}
   rows.forEach((r, i) => {
@@ -593,7 +599,7 @@ function flowGraph (f, picked, pick) {
         edges.push(svg('path', { class: cls, d: 'M' + x1 + ',' + y1 + ' C' + x1 + ',' + my + ' ' + x2 + ',' + my + ' ' + x2 + ',' + (y2 - 2), 'marker-end': 'url(#g-arrow)' }))
         lx = (x1 + x2) / 2; ly = my + 4
       } else {
-        const lane = GPAD + 4 + j * GLANE, dy = 6 + j * 4
+        const lane = GPAD + 4 + j * GLANE, dy = spread(j, long.length)
         const g1 = y1 + GY / 2 - dy, g2 = y2 - GY / 2 - dy
         edges.push(svg('path', { class: cls, d: 'M' + x1 + ',' + y1 + ' V' + g1 + ' H' + lane + ' V' + g2 + ' H' + x2 + ' V' + (y2 - 2), 'marker-end': 'url(#g-arrow)' }))
         lx = x2; ly = (g2 + y2) / 2 + 4
@@ -603,11 +609,11 @@ function flowGraph (f, picked, pick) {
   }
   loops.forEach((s, k) => {
     const p = pos[s.name], r = pos[s.repeat.from]
-    const lane = ox + inner + 12 + k * (GLANE + 4), dy = 6 + k * 4
+    const lane = ox + inner + 12 + k * (GLANE + 4), dy = spread(k, loops.length)
     const out = p.x + GW - 24, back = r.x + GW - 24
     const g1 = p.y + GH + GY / 2 + dy, g2 = r.y - GY / 2 + dy
     edges.push(svg('path', { class: 'edge loop', d: 'M' + out + ',' + (p.y + GH) + ' V' + g1 + ' H' + lane + ' V' + g2 + ' H' + back + ' V' + (r.y - 2), 'marker-end': 'url(#g-loop)' }))
-    const loop = f.loops && f.loops[s.name]
+    const loop = has(f.loops, s.name) ? f.loops[s.name] : null
     const ly = (g1 + g2) / 2
     labels.push(svg('text', { class: 'elabel loop', x: lane + 8, y: ly, 'text-anchor': 'middle', transform: 'rotate(90 ' + (lane + 8) + ' ' + ly + ')' },
       loop ? (loop.over ? (loop.round + 1) + ' rounds' : 'round ' + (loop.round + 1) + '/' + s.repeat.max) : 'up to ' + s.repeat.max))
@@ -615,7 +621,7 @@ function flowGraph (f, picked, pick) {
   const nodes = f.steps.map((s) => {
     const st = STEP_STATES(f, s)
     const { x, y } = pos[s.name]
-    const it = f.items && f.items[s.name]
+    const it = has(f.items, s.name) ? f.items[s.name] : null
     const dots = s.copies && it
       ? Array.from({ length: it.n }, (_, i) => svg('circle', { class: 'dot' + (i < it.done ? ' d-done' : i < it.done + (it.failed || 0) ? ' d-failed' : st === 'running' ? ' d-running' : ''), cx: x + GW - 14 - (it.n - 1 - i) * 11, cy: y + 41, r: 3.5 }))
       : []
@@ -658,8 +664,8 @@ function openFlow (id) {
 // sub-workflow), its result and its text.
 function stepPane (f, s) {
   const st = STEP_STATES(f, s)
-  const it = f.items && f.items[s.name]
-  const loop = f.loops && f.loops[s.name]
+  const it = has(f.items, s.name) ? f.items[s.name] : null
+  const loop = has(f.loops, s.name) ? f.loops[s.name] : null
   const counted = it ? ' (' + it.done + ' of ' + it.n + ' done' + (it.failed ? ', ' + it.failed + ' failed' : '') + ')' : ''
   const rows = [
     ['For', s.flow ? (typeof s.flow === 'string' ? 'the workflow in ' + s.flow : 'a workflow' + (s.flow.name ? ', ' + s.flow.name : '') + ', of ' + s.flow.steps.length + ' steps') : nameOf(s.to)],
@@ -681,7 +687,8 @@ function stepPane (f, s) {
     items.length ? more('fitems-' + f.id + '-' + s.name, (s.copies ? 'Copies' : 'Items') + ' (' + items.length + ')', h('div', { class: 'actions' }, items.map((k) => h('button', { class: 'b', title: 'Show job ' + f.jobs[k] + ' on the board', onclick: () => showJob(f.jobs[k]) },
       '#' + (Number(k.split('#')[1]) + 1), ' ', h('span', { class: 'mono muted' }, short(f.jobs[k]))
     )))) : null,
-    has(f.results, s.name) ? h('div', {}, h('div', { class: 'muted' }, st === 'failed' ? 'Why it failed' : 'Result'), h('pre', {}, f.results[s.name])) : null,
+    has(f.results, s.name) ? h('div', {}, h('div', { class: 'muted' }, st === 'failed' ? 'Why it failed' : 'Result'), h('pre', {}, f.results[s.name]))
+      : stopper(f) === s.name ? h('div', {}, h('div', { class: 'muted' }, 'Why it failed (it stopped the workflow)'), h('pre', {}, f.output)) : null,
     h('div', {}, h('div', { class: 'muted' }, s.flow ? 'Its input' : 'Job text', f.cut.includes(s.name) ? ' (cut to fit when posted)' : ''), h('pre', {}, s.text))
   )
 }
@@ -746,8 +753,14 @@ function flowsView () {
         h('div', { class: 'actions' }, btn('Start', 'flow-start', () => {
           let spec
           try { spec = JSON.parse(S.drafts['flow-spec'] || '') } catch (e) { return toast('The steps aren’t valid JSON: ' + e.message) }
+          const input = S.drafts['flow-input'] || ''
+          // One key per start, kept while the steps and input stay the same:
+          // pressing Start again after an error can't start a second run.
+          const what = S.drafts['flow-spec'] + '\\0' + input
+          if (!S.flowKey || S.flowKey.what !== what) S.flowKey = { what, key: Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('') }
           act('flow-start', async () => {
-            const r = await api(inGroup('/pai/flows'), { action: 'start', spec, input: S.drafts['flow-input'] || '' })
+            const r = await api(inGroup('/pai/flows'), { action: 'start', spec, input, key: S.flowKey.key })
+            S.flowKey = null
             S.flow = r.flow.id
             clear('flow-input')
           }, 'Started')
@@ -820,7 +833,7 @@ function render (force) {
   if (shown) { shown.scrollIntoView({ block: 'center' }); S.scrollTo = null }
   if (focus) {
     const el = document.getElementById(focus)
-    if (el) { el.focus(); try { if (sel !== null && sel !== undefined) el.setSelectionRange(sel, sel) } catch (e) {} }
+    if (el) { el.focus({ preventScroll: true }); try { if (sel !== null && sel !== undefined) el.setSelectionRange(sel, sel) } catch (e) {} }
   }
 }
 

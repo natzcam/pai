@@ -89,8 +89,9 @@ export interface FlowSpec {
 export type FlowState = 'running' | 'done' | 'failed' | 'canceled'
 
 export interface FlowRecord {
-  // 16 bytes, hex: random (top bit clear) for one a member started; for a
-  // sub-workflow or a schedule's run, derived (top bit set).
+  // 16 bytes, hex. One a member started: random (first byte 00xxxxxx),
+  // or from a start key (01xxxxxx, keyedFlowId). A sub-workflow or a
+  // schedule's run: derived (top bit set).
   id: string
   // The identity that started it: its steps' jobs are posted as its.
   by: string
@@ -126,6 +127,8 @@ export interface FlowRecord {
   // Once done: the final steps' result (the steps nothing waits for; with
   // more than one, each under its name). Once stopped: why.
   output: string | null
+  // The step whose failure or cancel stopped it, if one did.
+  stopped?: string
   at: number
   updated: number
 }
@@ -168,7 +171,8 @@ export interface ScheduleRecord {
 }
 
 export type FlowOp =
-  | { type: 'flow.start', flow: { id: string, name?: string, input: string, steps: FlowStep[] } }
+  // With `key`, the id is keyedFlowId(group, author, key) (the rules check).
+  | { type: 'flow.start', flow: { id: string, key?: string, name?: string, input: string, steps: FlowStep[] } }
   | { type: 'flow.cancel', id: string }
   | { type: 'schedule.set', schedule: Schedule }
   | { type: 'schedule.drop', name: string }
@@ -183,6 +187,28 @@ export const MAX_DEPTH = 3
 // The largest workflow (as JSON, in bytes) and its input.
 export const MAX_FLOW = 32 * 1024
 export const MAX_FLOW_INPUT = 16 * 1024
+// A start key's length, in bytes.
+export const MAX_FLOW_KEY = 200
+
+// The id of a workflow started with a key: from the group (its base's
+// key, hex), the starter and the key, so a repeat start has the same id
+// and the rules ignore it. Its first byte is 01xxxxxx: the rules' own ids
+// have the top bit set, and members' random ids start 00, so nobody can
+// take another member's keyed id first.
+export function keyedFlowId (group: string, by: string, key: string): string {
+  const raw = createHash('sha256').update(`pai flow key\0${group}\0${by}\0${key}`).digest().subarray(0, 16)
+  raw[0] = (raw[0]! & 0x3f) | 0x40
+  return raw.toString('hex')
+}
+
+export function isKeyedFlowId (id: string): boolean {
+  const top = parseInt(id[0]!, 16)
+  return top >= 4 && top < 8
+}
+
+export function isFlowKey (v: unknown): v is string {
+  return typeof v === 'string' && v.length > 0 && Buffer.byteLength(v) <= MAX_FLOW_KEY
+}
 // How many ended workflows the group keeps (see jobs' MAX_ENDED_JOBS).
 export const MAX_ENDED_FLOWS = 1000
 // How many schedules a group keeps, and how often one may run.
@@ -336,6 +362,7 @@ export function parseFlowOp (v: Record<string, any>): FlowOp | null {
       const f = v.flow
       // The top bit clear: ids with it set are the rules' own.
       if (typeof f !== 'object' || f === null || !isJobId(f.id) || isRulesJobId(f.id)) return null
+      if (f.key !== undefined ? !isFlowKey(f.key) || !isKeyedFlowId(f.id) : isKeyedFlowId(f.id)) return null
       if (typeof f.input !== 'string' || Buffer.byteLength(f.input) > MAX_FLOW_INPUT) return null
       return flowProblem({ ...(f.name !== undefined ? { name: f.name } : {}), steps: f.steps }) === null ? v as FlowOp : null
     }
@@ -481,6 +508,12 @@ const anyPost: MayPost = async () => true
 export async function applyFlowOp (op: FlowOp & { at: number }, author: string, view: JobView, admin: boolean, mayPost: MayPost = anyPost): Promise<void> {
   switch (op.type) {
     case 'flow.start':
+      // A key starts one run, ever: its marker outlasts the run's pruning,
+      // so a late repeat can't start a second under the same id.
+      if (op.flow.key !== undefined) {
+        if (await view.get(`flow-key/${op.flow.id}`) !== null) return
+        await view.put(`flow-key/${op.flow.id}`, op.at)
+      }
       await startFlow(view, { id: op.flow.id, by: author, name: op.flow.name ?? null, input: op.flow.input, steps: op.flow.steps }, op.at, mayPost)
       return
     case 'flow.cancel': {
@@ -702,7 +735,7 @@ async function stepLost (view: JobView, flow: FlowRecord, step: string, why: str
     return
   }
   const output = why === null ? `step ${step}${what ? ` (${what})` : ''} was canceled` : `step ${step} failed${why ? `: ${why}` : ''}`
-  await stop(view, { ...flow, state: why === null ? 'canceled' : 'failed', output, updated: at }, at, mayPost)
+  await stop(view, { ...flow, state: why === null ? 'canceled' : 'failed', output, stopped: step, updated: at }, at, mayPost)
 }
 
 // Drops a map step's item results, once its own result (or failure) has
@@ -778,8 +811,8 @@ async function postReady (view: JobView, w: Working, loops: Loop[], results: Rec
     return l === undefined || l === loopOf(asker) || w.loops[l.end]?.over === true
   }
   const jobOf = (name: string): string => own(w.jobs, name) ? w.jobs[name]! : stepJobId(w.id, name)
-  const fail = async (output: string): Promise<'elsewhere'> => {
-    await stop(view, { ...tidy(w), state: 'failed', output, updated: at }, at, mayPost)
+  const fail = async (step: string, output: string): Promise<'elsewhere'> => {
+    await stop(view, { ...tidy(w), state: 'failed', output, stopped: step, updated: at }, at, mayPost)
     return 'elsewhere'
   }
   for (const step of w.steps) {
@@ -803,7 +836,7 @@ async function postReady (view: JobView, w: Working, loops: Loop[], results: Rec
       if (problem !== null) {
         // A plan that isn't a workflow fails its step.
         const why = `the workflow from step ${source!} won't run: ${problem}`
-        if (!branchesOnFailure(w, step.name)) return await fail(`step ${step.name} failed: ${why}`)
+        if (!branchesOnFailure(w, step.name)) return await fail(step.name, `step ${step.name} failed: ${why}`)
         await view.put(`flow-result/${w.id}/${step.name}`, why)
         put(results, step.name, why)
         w.failed.push(step.name)
@@ -823,13 +856,13 @@ async function postReady (view: JobView, w: Working, loops: Loop[], results: Rec
       continue
     }
 
-    if (!await mayPost(w.by, step.to ?? null)) return await fail(`the group's policy doesn't let its starter post step ${step.name} for ${step.to ?? 'anyone'}`)
+    if (!await mayPost(w.by, step.to ?? null)) return await fail(step.name, `the group's policy doesn't let its starter post step ${step.name} for ${step.to ?? 'anyone'}`)
     // A map or copies step's own id is never a job's: it names its result.
     put(w.jobs, step.name, stepJobId(w.id, key))
     const list = step.map !== undefined
       ? itemsOf(source === null ? w.input : own(results, source) ? results[source]! : '')
       : step.copies !== undefined ? Array.from({ length: step.copies }, (_, i) => String(i + 1)) : [null]
-    if (list.length > MAX_ITEMS) return await fail(`step ${step.name} has ${list.length} items: a map step takes at most ${MAX_ITEMS}`)
+    if (list.length > MAX_ITEMS) return await fail(step.name, `step ${step.name} has ${list.length} items: a map step takes at most ${MAX_ITEMS}`)
     if (step.map !== undefined || step.copies !== undefined) {
       put(w.items, step.name, { n: list.length, done: 0 })
       if (list.length === 0) {

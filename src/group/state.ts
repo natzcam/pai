@@ -8,7 +8,7 @@
 
 import { applyJobOp, madeAt, parseJobOp, sweepJobs } from './jobs.js'
 import type { JobOp } from './jobs.js'
-import { applyFlowOp, flowJobEnded, flowTargets, parseFlowOp, runSchedule } from './flows.js'
+import { applyFlowOp, flowJobEnded, flowTargets, keyedFlowId, parseFlowOp, runSchedule } from './flows.js'
 import type { FlowOp } from './flows.js'
 
 // Members are identities (src/devices/): an id here is an identity's key,
@@ -268,6 +268,7 @@ async function applyOp (op: Op, writer: string, view: View, host: Host, bootstra
     const rec = await view.get(`member/${author}`)
     const m = rec?.value as MemberRecord | undefined
     if (!m || (m.until !== null && m.until <= at && !admin)) return
+    if (op.type === 'flow.start' && op.flow.key !== undefined && op.flow.id !== keyedFlowId(hex(bootstrap), author, op.flow.key)) return
     if (op.type === 'flow.start' && !(await postAllowed(view, author, flowTargets({ steps: op.flow.steps })))) return
     if (op.type === 'schedule.set' && !(await postAllowed(view, author, flowTargets(op.schedule.flow)))) return
     await applyFlowOp({ ...op, at } as FlowOp & { at: number }, author, view, admin, mayPostFor)

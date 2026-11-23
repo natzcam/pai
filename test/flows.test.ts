@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MAX_ITEMS, applyFlowOp, flowJobEnded, flowProblem, itemsOf, readFlow, render, runSchedule, scheduleProblem, specOf, stepJobId } from '../src/group/flows.js'
+import { MAX_ITEMS, applyFlowOp, flowJobEnded, flowProblem, itemsOf, keyedFlowId, parseFlowOp, readFlow, render, runSchedule, scheduleProblem, specOf, stepJobId } from '../src/group/flows.js'
 import type { FlowStep, MayPost, ScheduleRecord } from '../src/group/flows.js'
 import { RESULT_CUT_NOTE, applyJobOp, sweepJobs } from '../src/group/jobs.js'
 import type { JobRecord } from '../src/group/jobs.js'
@@ -90,6 +90,19 @@ describe('workflow apply', () => {
     await applyJobOp({ type: 'job.claim', id, at: 1 }, worker, writer, view, member, false, end)
     await applyJobOp({ type: 'job.done', id, state, result, ref: null, at: 2 }, worker, writer, view, member, false, end)
   }
+
+  it('start one run per key, even once that run is pruned', async () => {
+    const view = memView()
+    const by = hex(32)
+    await view.put(`member/${by}`, { id: by, until: null })
+    const id = keyedFlowId('g', by, 'k')
+    const op = { type: 'flow.start' as const, flow: { id, key: 'k', input: '', steps: [{ name: 'a', to: null, text: 'x' }] }, at: 0 }
+    await applyFlowOp(op, by, view, false)
+    expect(await readFlow(view, id)).not.toBeNull()
+    await view.del(`flow/${id}`)
+    await applyFlowOp(op, by, view, false)
+    expect(await readFlow(view, id)).toBeNull()
+  })
 
   it('takes any step name, reserves step ids, and ends with the final steps\' results', async () => {
     const view = memView()
@@ -667,7 +680,7 @@ describe('workflows', () => {
       const both: FlowSpec = { steps: [{ name: 'a', to: 'role:writer', text: 'x' }, { name: 'b', to: 'role:editor', text: 'y' }, { name: 'c', to: null, text: 'z', after: ['a', 'b'] }] }
       const flow = await boss.identity.startFlow(both, '')
       const failed = await boss.identity.waitFlow(flow.id, { timeout: 60_000 })
-      expect(failed).toMatchObject({ state: 'failed', output: 'step a failed: no ink' })
+      expect(failed).toMatchObject({ state: 'failed', output: 'step a failed: no ink', stopped: 'a' })
       // b (for an editor nobody runs) was canceled with it; c never posted.
       expect((await boss.identity.getJob(failed!.jobs.b!))?.state).toBe('canceled')
       expect(failed!.jobs.c).toBeUndefined()
@@ -679,8 +692,44 @@ describe('workflows', () => {
       await expect(boss.identity.startFlow({ steps: [] }, '')).rejects.toThrow(/steps/)
       // A field the rules would ignore is refused, from any client.
       await expect(boss.identity.startFlow({ steps: [{ name: 'a', to: null, text: 'x', depends_on: [] }] } as never, '')).rejects.toThrow(/did you mean after/)
+
+      // A start key: a repeat gives the same run, posting its steps once.
+      const once: FlowSpec = { steps: [{ name: 'only', to: 'role:editor', text: 'once' }] }
+      const first = await boss.identity.startFlow(once, 'in', { key: 'k1' })
+      const again = await boss.identity.startFlow(once, 'in', { key: 'k1' })
+      expect(again.id).toBe(first.id)
+      expect(again.jobs.only).toBe(first.jobs.only)
+      expect((await boss.identity.listJobs()).filter((j) => j.spec.text === 'once')).toHaveLength(1)
+      await expect(boss.identity.startFlow(once, 'other', { key: 'k1' })).rejects.toThrow(/different workflow/)
+      expect((await boss.identity.startFlow(once, 'in', { key: 'k2' })).id).not.toBe(first.id)
+      // The same key from another member is their own run.
+      expect((await writer.identity.startFlow(once, 'in', { key: 'k1' })).id).not.toBe(first.id)
+      await expect(boss.identity.startFlow(once, 'in', { key: '' })).rejects.toThrow(/start key/)
+      // Nobody else can take a member's keyed id first: the rules ignore it.
+      const group = Buffer.from(boss.identity.base.key).toString('hex')
+      const squat = keyedFlowId(group, boss.identity.self, 'k3')
+      await writer.identity.base.append({ type: 'flow.start', flow: { id: squat, key: 'k3', input: 'in', steps: once.steps } })
+      await writer.identity.base.append({ type: 'flow.start', flow: { id: squat, input: 'in', steps: once.steps } })
+      expect(await writer.identity.base.flow(squat)).toBeNull()
+      expect((await boss.identity.startFlow(once, 'in', { key: 'k3' })).id).toBe(squat)
     } finally {
       await writer.worker.close()
     }
   }, 90_000)
+})
+
+describe('workflow start keys', () => {
+  it('make an id per group, starter and key, in a range no other start can use', () => {
+    const steps = [{ name: 'a', to: null, text: 'x' }]
+    const id = keyedFlowId('g1', 'me', 'k')
+    expect(keyedFlowId('g1', 'me', 'k')).toBe(id)
+    expect(new Set([id, keyedFlowId('g2', 'me', 'k'), keyedFlowId('g1', 'you', 'k'), keyedFlowId('g1', 'me', 'k2')]).size).toBe(4)
+    expect(parseFlowOp({ type: 'flow.start', flow: { id, key: 'k', input: '', steps } })).not.toBeNull()
+    // Without its key, or with an unkeyed id: refused.
+    expect(parseFlowOp({ type: 'flow.start', flow: { id, input: '', steps } })).toBeNull()
+    expect(parseFlowOp({ type: 'flow.start', flow: { id: '0' + id.slice(1), key: 'k', input: '', steps } })).toBeNull()
+    expect(parseFlowOp({ type: 'flow.start', flow: { id: '0' + id.slice(1), input: '', steps } })).not.toBeNull()
+    expect(parseFlowOp({ type: 'flow.start', flow: { id, key: '', input: '', steps } })).toBeNull()
+  })
+
 })

@@ -235,8 +235,9 @@ export class DaemonClient {
     return (await this.json(await this.get(`/pai/flows/${id}${wait ? `?wait=${Math.floor(wait)}` : ''}`, signal ? { signal } : {})) as { flow: FlowView }).flow
   }
 
-  async startFlow (spec: FlowSpec, input: string): Promise<FlowView> {
-    return await this.#flowAction({ action: 'start', spec, input })
+  // With `key`, a repeat start returns the run the key started.
+  async startFlow (spec: FlowSpec, input: string, opts: { key?: string } = {}): Promise<FlowView> {
+    return await this.#flowAction({ action: 'start', spec, input, ...(opts.key !== undefined ? { key: opts.key } : {}) })
   }
 
   async cancelFlow (id: string): Promise<FlowView> {

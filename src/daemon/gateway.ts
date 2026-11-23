@@ -366,7 +366,7 @@ export async function startGateway (pai: Pai, opts: GatewayOptions): Promise<Gat
       }
       if (req.method === 'GET') return send(res, 200, { flows: await identity.listFlows() })
       if (req.method !== 'POST') return send(res, 405, { error: 'Use GET or POST' })
-      let body: { action?: unknown, spec?: unknown, input?: unknown, id?: unknown }
+      let body: { action?: unknown, spec?: unknown, input?: unknown, key?: unknown, id?: unknown }
       try {
         body = JSON.parse(await readBody(req, maxBody))
       } catch (err) {
@@ -376,7 +376,8 @@ export async function startGateway (pai: Pai, opts: GatewayOptions): Promise<Gat
       try {
         if (body?.action === 'start') {
           if (typeof body.input !== 'string') return send(res, 400, { error: 'input is text' })
-          return send(res, 200, { flow: await identity.startFlow(body.spec as FlowSpec, body.input) })
+          if (body.key !== undefined && typeof body.key !== 'string') return send(res, 400, { error: 'key is text' })
+          return send(res, 200, { flow: await identity.startFlow(body.spec as FlowSpec, body.input, body.key !== undefined ? { key: body.key } : {}) })
         }
         if (body?.action === 'cancel') {
           if (!isJobId(body.id)) return send(res, 400, { error: 'Expected a workflow id (32 hex characters)' })
