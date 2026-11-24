@@ -120,6 +120,9 @@ describe('GroupIdentity', () => {
     const groupWriter = hex(await localWriter(store, groupNamespace(of.entry.slot)))
     await store.close()
     await of.identity.own.append({ type: 'device.add', device, writer: identityWriter, name })
+    // A joiner's copy of the roster lists it, and lets it write, only once
+    // it has synced.
+    await waitFor(() => of.group.base.writable && of.group.roster().members.some((m) => m.id === of.identity.self), 15_000, 'a writable roster that lists this identity')
     await of.group.addDevice(device, groupWriter)
     const identity = new GroupIdentity({ storage, keys: of.keys, groups: [of.entry] })
     const pai = await agent(name, { storage, identity, handler: echo })
