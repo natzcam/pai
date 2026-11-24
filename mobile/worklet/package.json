@@ -1,0 +1,37 @@
+{
+  "name": "pai-worklet",
+  "version": "0.0.0",
+  "private": true,
+  "description": "pai's core in a Bare worklet, for the phone app",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "autobase": "^7.28.2",
+    "bare-buffer": "^3.7.3",
+    "bare-events": "^2.9.2",
+    "bare-fs": "^4.8.1",
+    "bare-os": "^3.9.4",
+    "bare-path": "^3.1.2",
+    "blind-pairing": "^2.3.1",
+    "compact-encoding": "^3.5.2",
+    "corestore": "^7.16.1",
+    "hyperbee": "^2.27.3",
+    "hyperdht": "^6.34.1",
+    "hyperswarm": "^4.17.2",
+    "protomux": "^3.13.0",
+    "sodium-universal": "^5.0.1",
+    "suspendify": "^1.7.2"
+  },
+  "devDependencies": {
+    "bare-pack": "^2.2.2",
+    "bare-sidecar": "^0.5.4",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  },
+  "overrides": {
+    "bare-type": "1.4.0"
+  }
+}

@@ -1,0 +1,8 @@
+node_modules
+dist
+coverage
+*.log
+.pai-data
+examples/**/.pai
+examples/**/.pai-*
+examples/**/pai.json

@@ -1,0 +1,10 @@
+{
+  "name": "plan-then-run",
+  "steps": [
+    { "name": "plan", "to": "role:writer",
+      "text": "Plan how a small team would write about: {{input}}\n\nReply with only a pai workflow as JSON: {\"steps\": [...]}, 2 to 5 steps, each { \"name\", \"to\", \"text\", \"after\"? }. Use \"to\": \"role:writer\", \"role:critic\" or \"role:editor\"; a step's text may use {{input}} and {{steps.<name>}} of a step it lists in after. The last step should give the finished piece." },
+    { "name": "run", "after": ["plan"], "flow": "steps.plan", "text": "{{input}}" },
+    { "name": "vote", "to": "role:critic", "after": ["run"], "copies": 3, "settle": { "agree": 2 },
+      "text": "Is this ready to publish? Reply with just yes or no.\n\n{{steps.run}}" }
+  ]
+}

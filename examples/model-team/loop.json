@@ -1,0 +1,10 @@
+{
+  "name": "draft-until-approved",
+  "steps": [
+    { "name": "draft", "to": "role:writer", "text": "Write a short explanation of: {{input}}\n\nIf there are notes from the last review, address them:\n{{prev.review}}" },
+    { "name": "review", "to": "role:critic", "after": ["draft"],
+      "repeat": { "from": "draft", "until": { "step": "review", "equals": "approved" }, "max": 3 },
+      "text": "Review this explanation of \"{{input}}\". If it's clear and correct, reply with just the word \"approved\"; else say what to change.\n\n{{steps.draft}}" },
+    { "name": "final", "to": "role:editor", "after": ["draft", "review"], "text": "Polish this for publishing:\n\n{{steps.draft}}" }
+  ]
+}

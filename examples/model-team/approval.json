@@ -1,0 +1,10 @@
+{
+  "name": "draft-and-approve",
+  "steps": [
+    { "name": "draft", "to": "role:writer", "text": "Write a short explanation of: {{input}}" },
+    { "name": "approve", "to": "role:approver", "after": ["draft"], "text": "Approve this explanation of \"{{input}}\"? Reply with just the word \"approved\", or say what to change. (pai job fail to reject it outright.)\n\n{{steps.draft}}" },
+    { "name": "publish", "to": "role:editor", "after": ["draft", "approve"], "if": { "step": "approve", "equals": "approved" }, "text": "Polish this for publishing:\n\n{{steps.draft}}" },
+    { "name": "revise", "to": "role:writer", "after": ["draft", "approve"], "if": { "step": "approve", "equals": "approved", "not": true }, "text": "Revise this explanation of \"{{input}}\".\n\nDraft:\n{{steps.draft}}\n\nWhat to change:\n{{steps.approve}}" },
+    { "name": "rejected", "to": "role:writer", "after": ["approve"], "if": { "step": "approve", "failed": true }, "text": "The explanation of \"{{input}}\" was rejected: {{steps.approve}}. Say in one line what you'd do differently." }
+  ]
+}

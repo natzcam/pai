@@ -1,0 +1,8 @@
+{
+  "name": "fan-out",
+  "steps": [
+    { "name": "outline", "to": "role:writer", "text": "Break \"{{input}}\" into exactly 3 subtopics. Reply with only a JSON array of 3 short strings." },
+    { "name": "sections", "to": "role:writer", "after": ["outline"], "map": "steps.outline", "text": "Topic: {{input}}\n\nWrite one short paragraph on this part of it: {{item}}" },
+    { "name": "final", "to": "role:editor", "after": ["sections"], "text": "Topic: {{input}}\n\nJoin these sections (a JSON array) into one short, coherent piece:\n\n{{steps.sections}}" }
+  ]
+}

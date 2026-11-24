@@ -1,0 +1,8 @@
+{
+  "name": "model-team",
+  "steps": [
+    { "name": "draft", "to": "role:writer", "text": "Write a short explanation of: {{input}}" },
+    { "name": "review", "to": "role:critic", "after": ["draft"], "text": "Review this explanation of \"{{input}}\":\n\n{{steps.draft}}" },
+    { "name": "final", "to": "role:editor", "after": ["draft", "review"], "text": "Topic: {{input}}\n\nDraft:\n{{steps.draft}}\n\nReview:\n{{steps.review}}" }
+  ]
+}

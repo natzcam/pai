@@ -1,0 +1,1 @@
+Holepunch is a peer-to-peer platform. It connects devices directly, even behind home routers.  No servers sit in the middle! Agents built on pai find each other by public key. This last sentence won't make the summary.

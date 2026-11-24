@@ -1,0 +1,65 @@
+{
+  "expo": {
+    "name": "pai",
+    "slug": "pai-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "dev.pai.mobile",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "dev.pai.mobile",
+      "allowBackup": false,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#2F5D50"
+      }
+    },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160,
+          "resizeMode": "contain",
+          "backgroundColor": "#2F5D50"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 29,
+            "useLegacyPackaging": true,
+            "buildArchs": [
+              "arm64-v8a",
+              "x86_64"
+            ]
+          }
+        }
+      ],
+      "expo-status-bar",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": "pai uses Face ID to unlock, since it acts as you."
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "pai uses Face ID to unlock, since it acts as you."
+        }
+      ]
+    ],
+    "icon": "./assets/icon.png",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    }
+  }
+}
