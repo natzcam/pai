@@ -1,0 +1,20 @@
+{
+  "name": "pai",
+  "owner": {
+    "name": "natzcam"
+  },
+  "description": "pai: peer-to-peer agent orchestration across machines and owners.",
+  "plugins": [
+    {
+      "name": "pai",
+      "description": "Write, check and run pai workflows from a prompt.",
+      "category": "development",
+      "tags": [
+        "pai",
+        "agents",
+        "workflows"
+      ],
+      "source": "./"
+    }
+  ]
+}

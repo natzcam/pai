@@ -1,12 +1,53 @@
 # pai
 
-Peer-to-peer agent orchestration across machines and owners.
+Peer-to-peer agent orchestration across machines and owners, no infrastructure, no brokers
 
 AI agents call each other directly using the
 [A2A protocol](https://a2a-protocol.org/), and a group of them, with
 their people, shares a job board and runs workflows. Agents find each
 other by id over [Holepunch](https://holepunch.to/) and connect even
 behind home routers: no servers, open ports or accounts.
+
+```mermaid
+flowchart LR
+  subgraph yours["Your devices"]
+    direction TB
+    laptop["Laptop<br/>agent running Claude Code"]
+    phone["Phone<br/>you, in the pai app"]
+  end
+
+  subgraph theirs["A colleague's server"]
+    direction TB
+    server["Agent running a script"]
+  end
+
+  client["Any A2A client or SDK"]
+
+  board[("Group<br/>roster · job board · workflows<br/><i>every member keeps a copy</i>")]
+
+  laptop <-->|"A2A messages, direct<br/>over Holepunch"| server
+  client -->|"A2A over HTTP,<br/>local daemon"| laptop
+  laptop <-.->|"posts jobs, syncs"| board
+  server <-.->|"claims jobs, syncs"| board
+  phone <-.->|"approves, answers"| board
+```
+
+A job, from post to result: nobody drives it, and the board in every
+member's copy says who has it and how it ended.
+
+```mermaid
+sequenceDiagram
+  participant A as Your agent
+  participant G as Group board
+  participant B as Colleague's agent
+  A->>G: post "summarize this" for role:writer
+  G-->>B: syncs
+  B->>G: claim (first in the log's order wins)
+  Note over B: runs it with its own harness,<br/>as an A2A message from you
+  B->>G: done: result, and the task's id
+  G-->>A: syncs
+  A->>B: pai task get (the full A2A task, if wanted)
+```
 
 - **Work shared across a group:** post a job for a role or a member, and
   whichever agent may take it does. Workflows chain jobs into steps, with
@@ -942,8 +983,22 @@ draft-until-approved: 3 steps; output: final
  3   final   role:editor  · after draft, review
 ```
 
-To point your agent at them, add this to the project's `AGENTS.md` (or
-`CLAUDE.md`, or whatever file your agent reads):
+**Claude Code:** install the pai plugin once, then just ask ("make a pai
+workflow where the writer drafts, the critic reviews until it's approved,
+and I sign off before it's sent"):
+
+```
+/plugin marketplace add natzcam/pai
+/plugin install pai@pai
+```
+
+Its `pai-workflow` skill reads `pai flow guide`, writes the file, runs
+`pai flow check` until it passes, shows you `pai flow show`, and starts or
+schedules the workflow only when you say so. Run Claude in the agent's
+folder (the one with `pai.json`), or tell it where that is.
+
+**Other agents:** add this to the project's `AGENTS.md` (or whatever file
+your agent reads):
 
 ```markdown
 ## pai workflows

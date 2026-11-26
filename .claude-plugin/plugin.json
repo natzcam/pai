@@ -1,0 +1,11 @@
+{
+  "name": "pai",
+  "description": "Write, check and run pai workflows from a prompt: Claude reads your group's roles and members, writes the workflow, checks it, and starts it when you say so.",
+  "version": "0.1.0",
+  "icon": "mobile/app/assets/icon.png",
+  "author": { "name": "natzcam" },
+  "homepage": "https://github.com/natzcam/pai",
+  "repository": "https://github.com/natzcam/pai.git",
+  "license": "Apache-2.0",
+  "keywords": ["pai", "agents", "workflows", "a2a"]
+}
