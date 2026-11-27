@@ -109,7 +109,7 @@ device has to be online for leases, deadlines and schedules to take
 effect. The full comparison, and the gaps still open:
 [COMPARISON.md](./COMPARISON.md).
 
-How it works: [DESIGN.md](./DESIGN.md). The protocol: [BINDING.md](./BINDING.md).
+How it works: [DESIGN.md](./DESIGN.md). The protocol: [BINDING.md](./BINDING.md). Ideas not built yet: [IDEAS.md](./IDEAS.md).
 
 **Contents:** [How pai stands out](#how-pai-stands-out) · [Install](#install) ·
 [Usage](#usage) ([commands](#commands), [CLI](#use-as-a-cli),
