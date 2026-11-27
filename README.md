@@ -901,8 +901,9 @@ A2A gateway's start action) makes the workflow's id from the group, you
 and the key, so a retry after a timeout, or a script that fires twice, gets
 the run the key already started. The group's rules check the id, so no
 other member can use your key's id first. A key starts one run, ever:
-once that run has been pruned, starting with the key again is an error. The same key with different steps or input is an
-error. The web page sends a key with each Start, so pressing it again after
+once that run has been pruned, starting with the key again is an error.
+The same key with a different workflow (its name, or its steps as written,
+field order included) or input is an error. The web page sends a key with each Start, so pressing it again after
 an error doesn't start a second run.
 
 Steps with no `after` start at once, in parallel; `"to": null` lets any

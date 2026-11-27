@@ -58,7 +58,7 @@ import type { JsonRpcId } from '../protocol/jsonrpc.js'
 //   GET  /ui                                     the web page (no token: pai ui links it with one)
 //   GET  /pai/flows                              { flows }: workflows, newest first
 //   GET  /pai/flows/<id>[?wait=<ms>]             { flow }, once it ends if waiting
-//   POST /pai/flows                              { action: 'start', spec, input }
+//   POST /pai/flows                              { action: 'start', spec, input, key? }
 //                                                or { action: 'cancel', id }
 
 export interface GatewayOptions {

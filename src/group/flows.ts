@@ -360,7 +360,7 @@ export function parseFlowOp (v: Record<string, any>): FlowOp | null {
   switch (v.type) {
     case 'flow.start': {
       const f = v.flow
-      // The top bit clear: ids with it set are the rules' own.
+      // The top bit clear (set: the rules' own); 01xxxxxx exactly when keyed.
       if (typeof f !== 'object' || f === null || !isJobId(f.id) || isRulesJobId(f.id)) return null
       if (f.key !== undefined ? !isFlowKey(f.key) || !isKeyedFlowId(f.id) : isKeyedFlowId(f.id)) return null
       if (typeof f.input !== 'string' || Buffer.byteLength(f.input) > MAX_FLOW_INPUT) return null

@@ -795,9 +795,14 @@ are in).
   so a clock that jumps past several makes one. A setter no longer a
   member drops the schedule at its next run. Since only admins move the
   clock, an admin's device has to be online for runs to start on time.
-- **Ops:** `flow.start {id, name?, input, steps}` by any member, with an
-  id whose top bit is clear (ids with it set are the rules' own, for
-  sub-workflows and scheduled runs), `flow.cancel {id}` by the starter or
+- **Ops:** `flow.start {id, key?, name?, input, steps}` by any member.
+  Ids with the top bit set are the rules' own, for sub-workflows and
+  scheduled runs. A member's random id has a first byte of `00xxxxxx`.
+  With a `key` (1 to 200 bytes), the id must be `keyedFlowId(group,
+  starter, key)`, a SHA-256 with a first byte of `01xxxxxx`, so no other
+  member can take it first; the rules ignore a start whose id exists, and
+  keep a `flow-key/<id>` marker so a key starts one run, ever, even after
+  that run is pruned (markers aren't pruned). `flow.cancel {id}` by the starter or
   an admin, and the schedule ops above. The policy is checked for every
   step's `to`, sub-workflows' written in place too, at the start and at
   `schedule.set`, and again as each step is posted. CLI `pai flow
