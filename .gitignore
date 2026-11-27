@@ -6,3 +6,4 @@ coverage
 examples/**/.pai
 examples/**/.pai-*
 examples/**/pai.json
+.claude/worktrees/
